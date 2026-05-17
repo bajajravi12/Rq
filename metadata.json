@@ -1,0 +1,8 @@
+{
+  "name": "RAVAN INFRA-X LITE",
+  "description": "Fast, stable infrastructure inventory and response analysis tool optimized for Termux.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
