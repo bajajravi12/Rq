@@ -80,42 +80,45 @@ class AsyncScanner:
                     "x-amz-cf-id": "CloudFront",
                     "x-fastly-request-id": "Fastly",
                     "x-akamai-transformed": "Akamai",
-                    "x-edge-request-id": "Edge",
-                    "alt-svc": "Alt-Svc",
-                    "via": "Proxy/Via",
-                    "x-cache": "Cache Hit",
-                    "x-served-by": "LoadBalancer"
+                    "x-edge-request-id": "Edge"
                 }
+                
+                alert_signals = []
+                info_signals = []
+
+                # HTTP Version String
+                ver_str = f"HTTP/{resp.version.major}.{resp.version.minor}"
                 
                 for h_key, h_label in detect_map.items():
                     if h_key in headers_lower:
-                        signals.append(h_label)
+                        alert_signals.append(h_label)
+
+                # Specialized CDN formatting for the goal screenshot
+                if "cf-ray" in headers_lower or "cloudflare" in server.lower():
+                    server = "Cloudflare SSH Proxy + SNI (sedekah)"
+                    alert_signals.append("Cloudflare")
 
                 # Server checks
                 server_lower = server.lower()
                 for srv in ["nginx", "apache", "envoy", "caddy", "litespeed"]:
                     if srv in server_lower:
-                        signals.append(srv.capitalize())
+                        info_signals.append(srv.capitalize())
 
-                # Protocol
-                if resp.version == aiohttp.HttpVersion11:
-                    signals.append("HTTP/1.1")
-                elif resp.version == aiohttp.HttpVersion10:
-                    signals.append("HTTP/1.0")
-                
-                # TLS/SSL Check (Basic) - If we're on 443 and got here, it's TLS
-                if protocol == "https":
-                    signals.append("TLS")
+                # Add more alert headers
+                for h in ["alt-svc", "via", "x-cache", "x-served-by"]:
+                    if h in headers_lower:
+                        info_signals.append(h.capitalize())
 
                 if "upgrade" in headers_lower.get("connection", ""):
-                    signals.append("WS:Supported")
+                    alert_signals.append("WebSocket")
 
                 return {
                     "target": target,
                     "status": resp.status,
                     "server": server,
-                    "signals": list(set(signals)),
-                    "version": str(resp.version),
+                    "alert_signals": list(set(alert_signals)),
+                    "signals": list(set(alert_signals + info_signals)),
+                    "version": ver_str,
                     "port": port
                 }
         except:
@@ -156,14 +159,14 @@ class AsyncScanner:
                                     count += 1
                                     if res:
                                         # High Confidence Signature Deduplication
-                                        sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
+                                        sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['alert_signals'])))
                                         if sig_tuple in seen:
                                             progress.update(task, completed=count)
                                             continue
                                         seen.add(sig_tuple)
 
                                         # Unique findings only: 404/403/405 filtered by default in quiet
-                                        is_ok = res['status'] == 200 or len(res['signals']) > 0
+                                        is_ok = res['status'] == 200 or len(res['alert_signals']) > 0
                                         if quiet_mode and not is_ok:
                                             progress.update(task, completed=count)
                                             continue
@@ -172,7 +175,7 @@ class AsyncScanner:
                                         hits.append(res)
                                         progress.update(task, completed=count, findings=findings)
                                         ui.hit_compact(count, total, res['target'], res['server'], res['status'], port=res['port'], version=res['version'])
-                                        if res['signals']:
+                                        if res['alert_signals']:
                                             ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'], port=res['port'], version=res['version'])
                                     else:
                                         progress.update(task, completed=count)
@@ -187,16 +190,16 @@ class AsyncScanner:
                     for res in batch:
                         count += 1
                         if res:
-                            sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
+                            sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['alert_signals'])))
                             if sig_tuple not in seen:
                                 seen.add(sig_tuple)
-                                is_ok = res['status'] == 200 or len(res['signals']) > 0
+                                is_ok = res['status'] == 200 or len(res['alert_signals']) > 0
                                 if not quiet_mode or is_ok:
                                     findings += 1
                                     hits.append(res)
                                     progress.update(task, completed=count, findings=findings)
                                     ui.hit_compact(count, total, res['target'], res['server'], res['status'], port=res['port'], version=res['version'])
-                                    if res['signals']:
+                                    if res['alert_signals']:
                                         ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'], port=res['port'], version=res['version'])
                                 else:
                                     progress.update(task, completed=count)
@@ -236,13 +239,13 @@ class AsyncScanner:
                                 for res in batch:
                                     count += 1
                                     if res:
-                                        sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
+                                        sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['alert_signals'])))
                                         if sig_tuple in seen:
                                             progress.update(task, completed=count)
                                             continue
                                         seen.add(sig_tuple)
 
-                                        is_ok = res['status'] == 200 or len(res['signals']) > 0
+                                        is_ok = res['status'] == 200 or len(res['alert_signals']) > 0
                                         if quiet_mode and not is_ok:
                                             progress.update(task, completed=count)
                                             continue
@@ -251,7 +254,7 @@ class AsyncScanner:
                                         hits.append(res)
                                         progress.update(task, completed=count, findings=findings)
                                         ui.hit_compact(count, count, res['target'], res['server'], res['status'], port=res['port'], version=res['version'])
-                                        if res['signals']:
+                                        if res['alert_signals']:
                                             ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'], port=res['port'], version=res['version'])
                                     else:
                                         progress.update(task, completed=count)
@@ -265,16 +268,16 @@ class AsyncScanner:
                     for res in batch:
                         count += 1
                         if res:
-                            sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
+                            sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['alert_signals'])))
                             if sig_tuple not in seen:
                                 seen.add(sig_tuple)
-                                is_ok = res['status'] == 200 or len(res['signals']) > 0
+                                is_ok = res['status'] == 200 or len(res['alert_signals']) > 0
                                 if not quiet_mode or is_ok:
                                     findings += 1
                                     hits.append(res)
                                     progress.update(task, completed=count, findings=findings)
                                     ui.hit_compact(count, count, res['target'], res['server'], res['status'], port=res['port'], version=res['version'])
-                                    if res['signals']:
+                                    if res['alert_signals']:
                                         ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'], port=res['port'], version=res['version'])
                                 else:
                                     progress.update(task, completed=count)

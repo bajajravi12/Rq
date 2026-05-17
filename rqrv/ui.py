@@ -142,10 +142,6 @@ class UI:
         status_color = "green" if str(status).startswith("2") else "yellow" if str(status).startswith("3") else "red"
         
         # Format: Progress: 3390/25856 (13.1%) [3458/25856] 56.228.x.x 443 HTTP/1.1 404 Not Found
-        # The bracketed part in screenshot seems to be a lookahead or range, 
-        # but often it's just showing the exact same count or a slightly shifted one.
-        # I'll just show the count.
-        
         prog_str = f"[grey37]Progress: {count}/{total or '??'} ({percent:.1f}%) [{count}/{total or '??'}][/grey37]"
         targ_str = f"[bold white]{target}[/bold white] [bold cyan]{port}[/bold cyan]"
         stat_str = f"[{status_color}]{version} {status} {status_msg}[/]"
