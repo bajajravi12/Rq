@@ -6,16 +6,19 @@ from rich.progress import Progress, BarColumn, TextColumn
 class Utils:
     def __init__(self):
         self.settings_file = "settings.json"
+        self.session_file = "session_state.json"
         self.defaults = {
             "threads": 50,
             "timeout": 5,
             "retries": 1,
             "chunk_size": 100,
+            "ports": "80,443",
             "show_all": True,
             "save_logs": True,
             "quiet_mode": False
         }
         self.settings = self.load_settings()
+        self.session = self.load_session()
 
     def load_settings(self):
         if os.path.exists(self.settings_file):
@@ -30,6 +33,20 @@ class Utils:
         self.settings = new_settings
         with open(self.settings_file, "w") as f:
             json.dump(self.settings, f, indent=4)
+
+    def load_session(self):
+        if os.path.exists(self.session_file):
+            try:
+                with open(self.session_file, "r") as f:
+                    return json.load(f)
+            except:
+                return {}
+        return {}
+
+    def save_session(self, key, value):
+        self.session[key] = value
+        with open(self.session_file, "w") as f:
+            json.dump(self.session, f, indent=4)
 
     @staticmethod
     def ensure_dirs():

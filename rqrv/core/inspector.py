@@ -18,19 +18,23 @@ class WebInspector:
                 # CDN Detection
                 cdn = None
                 cdn_sigs = {
-                    "CF-Ray": "Cloudflare",
+                    "cf-ray": "Cloudflare",
                     "cf-cache-status": "Cloudflare",
                     "x-amz-cf-id": "CloudFront",
                     "x-amz-cf-pop": "CloudFront",
                     "x-fastly-request-id": "Fastly",
-                    "X-Akamai-Transformed": "Akamai",
-                    "x-cache": "Cache Server",
-                    "x-served-by": "Load Balancer",
-                    "via": "Proxy/CDN",
+                    "x-akamai-transformed": "Akamai",
+                    "x-edge-request-id": "Edge",
+                    "x-goog-meta-": "Google",
+                    "alt-svc": "Alt-Svc",
+                    "via": "Proxy/Via",
+                    "x-cache": "Cache Hit",
+                    "x-served-by": "LoadBalancer"
                 }
                 
+                headers_lower = {k.lower(): v.lower() for k, v in headers.items()}
                 for h_key, h_label in cdn_sigs.items():
-                    if h_key in headers:
+                    if h_key in headers_lower:
                         cdn = h_label
                         break
                 
@@ -38,11 +42,14 @@ class WebInspector:
                 server = headers.get("Server", "Unknown")
                 
                 # WebSocket
-                ws = "upgrade" in headers.get("Connection", "").lower() and \
-                     "websocket" in headers.get("Upgrade", "").lower()
+                conn_val = headers_lower.get("connection", "")
+                upgrade_val = headers_lower.get("upgrade", "")
+                ws = "upgrade" in conn_val and "websocket" in upgrade_val
 
-                # Alt-Svc
+                # Additional Headers
                 alt_svc = headers.get("Alt-Svc", "None")
+                cache_control = headers.get("Cache-Control", "None")
+                via = headers.get("Via", "None")
 
                 return {
                     "status": resp.status_code,
@@ -51,6 +58,8 @@ class WebInspector:
                     "cdn": cdn,
                     "ws": ws,
                     "alt_svc": alt_svc,
+                    "cache_control": cache_control,
+                    "via": via,
                     "headers": dict(headers)
                 }
             except Exception as e:

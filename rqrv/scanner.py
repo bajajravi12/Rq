@@ -1,6 +1,10 @@
 import asyncio
 import aiohttp
 import ipaddress
+import threading
+import sys
+import termios
+import tty
 from .ui import ui
 from rich.live import Live
 from rich.console import Group
@@ -19,15 +23,38 @@ class AsyncScanner:
         if self.paused:
             self._pause_event.set()
             self.paused = False
+            ui.console.print("[bold yellow] » SCAN RESUMED[/bold yellow]")
             return "RESUMED"
         else:
             self._pause_event.clear()
             self.paused = True
+            ui.console.print("[bold yellow] » SCAN PAUSED - [R] to Resume[/bold yellow]")
             return "PAUSED"
 
     def stop(self):
         self.stopped = True
         self._pause_event.set() # Unblock if paused
+        ui.console.print("[bold red] » SCAN TERMINATED BY USER[/bold red]")
+
+    def listen_controls(self):
+        # Non-blocking stdin listener for Termux/Unix
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+            while not self.stopped:
+                char = sys.stdin.read(1).lower()
+                if char == 'p':
+                    if not self.paused: self.toggle_pause()
+                elif char == 'r':
+                    if self.paused: self.toggle_pause()
+                elif char == 's':
+                    self.stop()
+                    break
+        except:
+            pass
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
     async def check_host(self, session, target, port=80):
         if self.stopped: return None
@@ -107,6 +134,9 @@ class AsyncScanner:
         progress = utils.get_progress()
         task = progress.add_task("Scanning", total=total, completed=count, findings=findings)
         
+        # Start control listener
+        threading.Thread(target=self.listen_controls, daemon=True).start()
+
         async with aiohttp.ClientSession() as session:
             with Live(Group(progress), console=ui.console, refresh_per_second=4, transient=False) as live:
                 tasks = []
@@ -185,6 +215,9 @@ class AsyncScanner:
         
         progress = utils.get_progress()
         task = progress.add_task("Scanning List", total=None, completed=count, findings=findings)
+
+        # Start control listener
+        threading.Thread(target=self.listen_controls, daemon=True).start()
 
         async with aiohttp.ClientSession() as session:
             with Live(Group(progress), console=ui.console, refresh_per_second=4, transient=False) as live:

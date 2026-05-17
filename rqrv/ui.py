@@ -59,8 +59,9 @@ class UI:
             ("3", "BULK ASSET AUDIT"),
             ("4", "METHOD ANALYZER"),
             ("5", "REVERSE DNS PRO"),
-            ("6", "VIEW LOGS"),
-            ("7", "EXIT")
+            ("6", "HUNTER SETTING"),
+            ("7", "VIEW LOGS"),
+            ("8", "EXIT")
         ]
         
         for i, (idx, label) in enumerate(options):
