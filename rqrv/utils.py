@@ -21,10 +21,9 @@ class Utils:
     @staticmethod
     def get_progress():
         return Progress(
-            TextColumn("[bold bright_cyan]『 RQ ACTIVE 』"),
-            BarColumn(bar_width=10, pulse_style="bright_cyan"),
-            TextColumn("[bold white]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
+            TextColumn("[bold cyan]『 RQ ACTIVE 』[/bold cyan]"),
+            BarColumn(bar_width=15, style="grey15", complete_style="bright_cyan", finished_style="bright_green"),
+            TextColumn("[bold white]{task.percentage:>3.0f}%[/bold white]"),
             expand=False
         )
 
