@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Terminal, Shield, Search, FileText, Play, Pause, Square, Save, Download, AlertCircle, ChevronRight, Activity } from 'lucide-react';
+import { Terminal, Shield, Search, FileText, Play, Pause, Square, Save, Download, AlertCircle, ChevronRight, Activity, LogOut } from 'lucide-react';
 
 // --- Types ---
 interface Hit {
@@ -52,7 +52,7 @@ const Header = () => (
   </div>
 );
 
-const HitPanel = ({ hit }: { hit: Hit }) => (
+const HitPanel: React.FC<{ hit: Hit }> = ({ hit }) => (
   <motion.div
     initial={{ opacity: 0, scale: 0.95 }}
     animate={{ opacity: 1, scale: 1 }}
@@ -84,6 +84,18 @@ const HitPanel = ({ hit }: { hit: Hit }) => (
     </div>
   </motion.div>
 );
+
+// --- Constants ---
+const menuOptions = [
+  { id: 1, label: 'SINGLE INSPECTOR', icon: Search },
+  { id: 2, label: 'CIDR INVENTORY', icon: Terminal },
+  { id: 3, label: 'BULK ASSET AUDIT', icon: FileText },
+  { id: 4, label: 'METHOD ANALYZER', icon: Activity },
+  { id: 5, label: 'REVERSE DNS PRO', icon: Shield },
+  { id: 6, label: 'VIEW LOGS', icon: Save },
+  { id: 7, label: 'SETTINGS', icon: Activity },
+  { id: 8, label: 'EXIT', icon: LogOut },
+];
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<number | null>(null);

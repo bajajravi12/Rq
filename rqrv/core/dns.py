@@ -1,29 +1,28 @@
 import dns.resolver
 import dns.reversename
+import socket
 
 class DNSInspector:
     @staticmethod
     def get_ptr(ip):
+        if not ip: return []
         try:
             addr = dns.reversename.from_address(ip)
-            answers = dns.resolver.resolve(addr, "PTR")
+            resolver = dns.resolver.Resolver()
+            resolver.timeout = 3.0
+            resolver.lifetime = 3.0
+            answers = resolver.resolve(addr, "PTR")
             return [str(ans).strip('.') for ans in answers]
         except Exception:
-            return []
-
-    @staticmethod
-    def get_a(hostname):
-        try:
-            answers = dns.resolver.resolve(hostname, "A")
-            return [str(ans) for ans in answers]
-        except Exception:
-            return []
+            try:
+                # Fallback to socket
+                name, alias, addresslist = socket.gethostbyaddr(ip)
+                return list(set([name] + alias))
+            except:
+                return []
 
     @staticmethod
     def reverse_dns_pro(ip):
         ptrs = DNSInspector.get_ptr(ip)
-        results = []
-        for ptr in ptrs:
-            # Check if this hostname points back or has multiple hostnames
-            results.append(ptr)
+        results = list(set(ptrs)) # Deduplicate
         return results

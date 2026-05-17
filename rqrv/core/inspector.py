@@ -17,14 +17,22 @@ class WebInspector:
                 
                 # CDN Detection
                 cdn = None
-                if "CF-Ray" in headers or "cf-cache-status" in headers:
-                    cdn = "Cloudflare"
-                elif "x-amz-cf-id" in headers or "x-amz-cf-pop" in headers:
-                    cdn = "CloudFront"
-                elif "x-fastly-request-id" in headers:
-                    cdn = "Fastly"
-                elif "X-Akamai-Transformed" in headers:
-                    cdn = "Akamai"
+                cdn_sigs = {
+                    "CF-Ray": "Cloudflare",
+                    "cf-cache-status": "Cloudflare",
+                    "x-amz-cf-id": "CloudFront",
+                    "x-amz-cf-pop": "CloudFront",
+                    "x-fastly-request-id": "Fastly",
+                    "X-Akamai-Transformed": "Akamai",
+                    "x-cache": "Cache Server",
+                    "x-served-by": "Load Balancer",
+                    "via": "Proxy/CDN",
+                }
+                
+                for h_key, h_label in cdn_sigs.items():
+                    if h_key in headers:
+                        cdn = h_label
+                        break
                 
                 # Server
                 server = headers.get("Server", "Unknown")
