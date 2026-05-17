@@ -10,9 +10,17 @@ authors = [{name = "RAVAN"}]
 requires-python = ">=3.13"
 dependencies = [
     "requests",
-    "ipaddress",
-    "colorama"
+    "aiohttp",
+    "httpx[http2]",
+    "dnspython",
+    "tldextract",
+    "ipwhois",
+    "cryptography",
+    "pyOpenSSL",
+    "rich",
+    "colorama",
+    "ipaddress"
 ]
 
 [project.scripts]
-rq = "rq.main:main"
+rq = "rqrv.main:main"

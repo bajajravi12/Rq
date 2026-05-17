@@ -1,69 +1,113 @@
 import os
-import sys
-from colorama import Fore, Style, init
-
-init(autoreset=True)
+import shutil
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.progress import Progress, BarColumn, TextColumn, SpinnerColumn
+from rich.layout import Layout
+from rich.live import Live
+from rich.align import Align
+from rich.text import Text
+from rich import box
 
 class UI:
-    @staticmethod
-    def clear():
-        os.system('cls' if os.name == 'nt' else 'clear')
+    def __init__(self):
+        self.console = Console()
+        self.width = shutil.get_terminal_size().columns
+        self.colors = {
+            "Cloudflare": "orange3",
+            "CloudFront": "deep_sky_blue1",
+            "Fastly": "cyan",
+            "nginx": "green",
+            "Apache": "yellow",
+            "Envoy": "purple3",
+            "Unknown": "grey70",
+            "success": "bold green",
+            "warning": "bold yellow",
+            "error": "bold red",
+            "neon": "spring_green1"
+        }
 
-    @staticmethod
-    def banner():
-        UI.clear()
-        banner = f"""
-{Fore.RED}{Style.BRIGHT}    ██████╗  █████╗ ██╗   ██╗ █████╗ ███╗   ██╗
-    ██╔══██╗██╔══██╗██║   ██║██╔══██╗████╗  ██║
-    ██████╔╝███████║██║   ██║███████║██╔██╗ ██║
-    ██╔══██╗██╔══██║╚██╗ ██╔╝██╔══██║██║╚██╗██║
-    ██║  ██║██║  ██║ ╚████╔╝ ██║  ██║██║ ╚████║
-    ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═══╝
-    {Fore.WHITE}{Style.DIM}INFRA-X LITE v1.0.0 | Termux Optimized
-        """
-        print(banner)
+    def clear(self):
+        self.console.clear()
 
-    @staticmethod
-    def menu():
-        print(f"{Fore.RED}[1]{Fore.WHITE} FILE SCAN")
-        print(f"{Fore.RED}[2]{Fore.WHITE} CIDR SCAN")
-        print("\n" + Fore.RED + "» " + Fore.WHITE, end="")
+    def banner(self):
+        self.clear()
+        banner_text = Text(r"""
+ ╔═════════════════════════════════════════════════╗
+ ║   ██████╗  █████╗ ██╗   ██╗ █████╗ ███╗   ██╗  ║
+ ║   ██╔══██╗██╔══██╗██║   ██║██╔══██╗████╗  ██║  ║
+ ║   ██████╔╝███████║██║   ██║███████║██╔██╗ ██║  ║
+ ║   ██╔══██╗██╔══██║╚██╗ ██╔╝██╔══██║██║╚██╗██║  ║
+ ║   ██║  ██║██║  ██║ ╚████╔╝ ██║  ██║██║ ╚████║  ║
+ ║   ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═══╝  ║
+ ║           INFRA TERMINAL | Made by RQ           ║
+ ╚═════════════════════════════════════════════════╝
+        """, style="bold bright_cyan")
+        self.console.print(Align.center(banner_text))
 
-    @staticmethod
-    def progress_bar(current, total, ip, hits, threads):
-        width = 10
-        percent = (current / total) * 100
-        filled = int(width * current // total)
-        bar = '█' * filled + '░' * (width - filled)
+    def menu(self):
+        options = [
+            "SINGLE HOST INSPECTOR", "CIDR INVENTORY", "BULK ASSET AUDIT",
+            "METHOD ANALYZER", "REVERSE DNS PRO", "IP TO ASN/CIDR",
+            "VIEW SAVED LOGS", "SETTINGS", "EXIT PROGRAM"
+        ]
         
-        # Compact Termux UI
-        sys.stdout.write(f"\r{Fore.RED}『 HUNTER ACTIVE 』{Fore.RESET}\n")
-        sys.stdout.write(f"{Fore.WHITE}{ip}{Fore.RESET}\n")
-        sys.stdout.write(f"{Fore.RED}{bar} {Fore.WHITE}{percent:.0f}%\n")
-        sys.stdout.write(f"{Fore.RED}H:{hits} / T:{threads}{Fore.RESET}\n")
-        # Move cursor back up 4 lines to overwrite
-        sys.stdout.write("\033[4A")
-        sys.stdout.flush()
+        table = Table(box=box.MINIMAL_DOUBLE_HEAD, show_header=False, border_style="cyan")
+        for i, opt in enumerate(options, 1):
+            table.add_row(f"[bold cyan][{i}][/bold cyan]", f"[bold white]{opt}[/bold white]")
+        
+        self.console.print(Align.center(table))
+        self.console.print("\n[bold spring_green1]╭─ [white]TARGET INPUT[/white][/bold spring_green1]")
+        self.console.print("[bold spring_green1]╰─► [/bold spring_green1]", end="")
 
-    @staticmethod
-    def hit_panel(target, server, status, method, version):
-        print("\n" + Fore.RED + "╭──── HIT ────╮")
-        print(f"{Fore.WHITE}Proxy   {target}")
-        print(f"{Fore.WHITE}Server  {server}")
-        print(f"{Fore.WHITE}Status  {status}")
-        print(f"{Fore.WHITE}Method  {method}")
-        print(f"{Fore.WHITE}Signal  Responsive")
-        print(f"{Fore.WHITE}Version {version}")
-        print(Fore.RED + "╰─────────────╯")
+    def hit_panel(self, target, server, tls, version, ws, cdn):
+        server_color = self.colors.get(server, self.colors["Unknown"])
+        
+        content = Text.assemble(
+            ("Host     : ", "cyan"), (f"{target}\n", "white"),
+            ("Server   : ", "cyan"), (f"{server}\n", server_color),
+            ("TLS      : ", "cyan"), (f"{tls}\n", "white"),
+            ("Version  : ", "cyan"), (f"{version}\n", "white"),
+            ("WebSocket: ", "cyan"), (("Supported" if ws else "No"), "green" if ws else "red"), ("\n", ""),
+            ("CDN      : ", "cyan"), (("Active" if cdn else "No"), "orange3" if cdn else "grey50")
+        )
+        
+        panel = Panel(
+            Align.left(content),
+            title="[bold green]✓ RESULT[/bold green]",
+            border_style="cyan",
+            box=box.ROUNDED,
+            width=min(self.width - 2, 45)
+        )
+        self.console.print(panel)
 
-    @staticmethod
-    def info(msg):
-        print(f"{Fore.BLUE}[i]{Fore.WHITE} {msg}")
+    def progress_ui(self, current, total, target, hits):
+        # Progress bar optimized for mobile
+        width = 10
+        percent = (current / total) * 100 if total > 0 else 0
+        
+        self.console.print(f"\n[bold spring_green1]『 RQ ACTIVE 』[/bold spring_green1]")
+        self.console.print(f"[white]{target}[/white]")
+        
+        bar_len = int(width * percent / 100)
+        bar = "█" * bar_len + "░" * (width - bar_len)
+        self.console.print(f"[cyan]{bar}[/cyan] [bold white]{percent:.0f}%[/bold white]")
+        self.console.print(f"[bold spring_green1]H:{hits} / T:{total}[/bold spring_green1]")
+        # Shift cursor up to overwrite in next cycle
+        self.console.print("\033[5A", end="")
 
-    @staticmethod
-    def success(msg):
-        print(f"{Fore.GREEN}[+]{Fore.WHITE} {msg}")
+    def info(self, msg):
+        self.console.print(f"[bold blue][i][/bold blue] {msg}")
 
-    @staticmethod
-    def error(msg):
-        print(f"{Fore.RED}[!]{Fore.WHITE} {msg}")
+    def success(self, msg):
+        self.console.print(f"[bold green][+][/bold green] {msg}")
+
+    def error(self, msg):
+        self.console.print(f"[bold red][!][/bold red] {msg}")
+
+    def warning(self, msg):
+        self.console.print(f"[bold yellow][?][/bold yellow] {msg}")
+
+ui = UI()
+

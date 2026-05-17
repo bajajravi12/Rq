@@ -17,11 +17,23 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  app.get("/api/files", (req, res) => {
-    // Mock detecting files in environment
+  app.get("/api/network/rdns/:ip", (req, res) => {
+    res.json({ names: [`ptr-${req.params.ip.replace(/\./g, "-")}.example.com`] });
+  });
+
+  app.get("/api/network/asn/:ip", (req, res) => {
+    res.json({
+      asn: "AS12345",
+      cidr: `${req.params.ip.split(".").slice(0, 3).join(".")}.0/24`,
+      org: "Example Infrastructure Corp",
+      country: "US"
+    });
+  });
+
+  app.get("/api/logs", (req, res) => {
     res.json([
-      { name: "targets.txt", path: "/tmp/targets.txt" },
-      { name: "vps_list.txt", path: "/tmp/vps_list.txt" },
+      { name: "scan_1715933034.txt", date: new Date().toISOString() },
+      { name: "scan_1715933088.txt", date: new Date().toISOString() },
     ]);
   });
 
