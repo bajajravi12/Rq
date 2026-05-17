@@ -113,40 +113,43 @@ class UI:
         self.console.print("\n")
         self.console.print(Align.center(panel))
 
-    def interesting_panel(self, target, server, status, signals):
-        content = Table.grid(expand=True)
-        content.add_column(style="bold cyan", width=10)
-        content.add_column(style="white")
+    def interesting_panel(self, target, server, status, signals, port=80, version="HTTP/1.1"):
+        import datetime
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
         
-        content.add_row(" Host", f": {target}")
-        content.add_row(" Status", f": [bold green]HTTP {status}[/]")
-        content.add_row(" Server", f": [{self.colors.get(server, 'white')}]{server}[/]")
-        content.add_row(" Signal", f": [bold yellow]{', '.join(signals)}[/]")
+        from http import HTTPStatus
+        try:
+            status_msg = HTTPStatus(status).phrase
+        except:
+            status_msg = "Unknown"
 
-        panel = Panel(
-            content,
-            title="[bold yellow]╭────── ✓ INTERESTING RESPONSE ──────╮[/bold yellow]",
-            title_align="center",
-            border_style="bold yellow",
-            box=box.HEAVY,
-            width=self.max_w
-        )
-        self.console.print("\n")
-        self.console.print(Align.center(panel))
-        self.console.print("\n")
+        self.console.print(f"\n[bold green] ✓ HIT [{ts}][/bold green]")
+        self.console.print(f" [bold white]Proxy  :[/bold white] [green]{target}[/green] [cyan]{port}[/cyan]")
+        self.console.print(f" [bold white]Server :[/bold white] [{self.colors.get(server, 'white')}]{server}[/]")
+        self.console.print(f" [bold white]Status :[/bold white] [bold bright_green]{version} {status} {status_msg}[/bold bright_green]")
+        self.console.print("[dim]=============================================[/dim]\n")
 
-    def hit_compact(self, count, total, target, server, status, findings=0):
-        server_color = self.colors.get(server, "white")
+    def hit_compact(self, count, total, target, server, status, port=80, version="HTTP/1.1"):
+        percent = (count / total) * 100 if total and total > 0 else 0
+        
+        from http import HTTPStatus
+        try:
+            status_msg = HTTPStatus(status).phrase
+        except:
+            status_msg = "Unknown"
+
         status_color = "green" if str(status).startswith("2") else "yellow" if str(status).startswith("3") else "red"
         
-        # Compact Scrolling Output
-        prog = f"[grey37][{count}/{total}][/grey37]"
-        targ = f"[bold white]{target[:18]:<18}[/bold white]"
-        stat = f"[{status_color}]HTTP {status}[/]"
-        serv = f"[{server_color}]{server[:10]:<10}[/]"
+        # Format: Progress: 3390/25856 (13.1%) [3458/25856] 56.228.x.x 443 HTTP/1.1 404 Not Found
+        # The bracketed part in screenshot seems to be a lookahead or range, 
+        # but often it's just showing the exact same count or a slightly shifted one.
+        # I'll just show the count.
         
-        # Progress & Findings info on the same line or nearby is handled by Live
-        self.console.print(f"{prog} {targ} {stat} {serv}")
+        prog_str = f"[grey37]Progress: {count}/{total or '??'} ({percent:.1f}%) [{count}/{total or '??'}][/grey37]"
+        targ_str = f"[bold white]{target}[/bold white] [bold cyan]{port}[/bold cyan]"
+        stat_str = f"[{status_color}]{version} {status} {status_msg}[/]"
+        
+        self.console.print(f"{prog_str} {targ_str} {stat_str}")
 
     def progress_bar(self, current, total, hits):
         # Compact progress bar for Termux

@@ -10,6 +10,7 @@ class Utils:
             "threads": 50,
             "timeout": 5,
             "retries": 1,
+            "chunk_size": 100,
             "show_all": True,
             "save_logs": True,
             "quiet_mode": False
@@ -46,6 +47,14 @@ class Utils:
         with open(jname, "w") as f:
             json.dump(data, f, indent=4)
             
+        # Categorized files
+        cats = {
+            "cloudflare": [],
+            "cloudfront": [],
+            "nginx": [],
+            "interesting": []
+        }
+        
         # Save readable logs
         lname = f"logs/scan_{ts}.log"
         with open(lname, "w") as f:
@@ -54,13 +63,43 @@ class Utils:
             seen = set()
             for hit in data:
                 t = hit.get('target')
-                if t not in seen:
-                    stat = hit.get('status')
-                    serv = hit.get('server', 'Unknown')
-                    sigs = ", ".join(hit.get('signals', []))
-                    f.write(f"[HTTP {stat}] {t:<25} | {serv:<12} | Signals: {sigs}\n")
-                    seen.add(t)
+                if t in seen: continue
+                seen.add(t)
+                
+                stat = hit.get('status')
+                serv = hit.get('server', 'Unknown').lower()
+                sigs = hit.get('signals', [])
+                sigs_str = ", ".join(sigs)
+                
+                line = f"[HTTP {stat}] {t:<25} | {serv:<12} | Signals: {sigs_str}\n"
+                f.write(line)
+                
+                # Sort into categories
+                added = False
+                if any("cloudflare" in s.lower() for s in signals_to_check(hit)):
+                    cats["cloudflare"].append(t)
+                    added = True
+                if any("cloudfront" in s.lower() for s in signals_to_check(hit)):
+                    cats["cloudfront"].append(t)
+                    added = True
+                if "nginx" in serv:
+                    cats["nginx"].append(t)
+                    added = True
+                
+                if not added or len(sigs) > 2:
+                    cats["interesting"].append(t)
+
+        # Write categorized files
+        for cat, targets in cats.items():
+            if targets:
+                with open(f"results/{cat}.txt", "a") as cf:
+                    for target in sorted(list(set(targets))):
+                        cf.write(f"{target}\n")
+
         return lname
+
+def signals_to_check(hit):
+    return hit.get('signals', []) + [hit.get('server', '')]
 
     @staticmethod
     def get_progress():

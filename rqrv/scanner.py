@@ -45,44 +45,51 @@ class AsyncScanner:
                 headers_lower = {k.lower(): v.lower() for k, v in headers.items()}
                 
                 if resp.status == 200: signals.append("200 OK")
-                if resp.status == 101: signals.append("WS Switch")
+                if resp.status == 101: signals.append("101 Switch")
                 
-                # Check for CDN/Proxy headers
-                cdn_headers = {
+                # CDN/Platform Detection
+                detect_map = {
                     "cf-ray": "Cloudflare",
                     "x-amz-cf-id": "CloudFront",
                     "x-fastly-request-id": "Fastly",
                     "x-akamai-transformed": "Akamai",
                     "x-edge-request-id": "Edge",
-                    "x-goog-meta-": "Google",
-                    "via": "Proxy/CDN",
-                    "x-cache": "Cache Hit",
-                    "x-served-by": "Load Balancer",
                     "alt-svc": "Alt-Svc",
-                    "server": "Server Detected"
+                    "via": "Proxy/Via",
+                    "x-cache": "Cache Hit",
+                    "x-served-by": "LoadBalancer"
                 }
                 
-                for h_key, h_label in cdn_headers.items():
+                for h_key, h_label in detect_map.items():
                     if h_key in headers_lower:
-                        if h_key == "server":
-                            signals.append(f"Server:{server}")
-                        else:
-                            signals.append(h_label)
+                        signals.append(h_label)
 
-                # Protocol and upgrades
-                if "upgrade" in headers_lower.get("connection", ""):
-                    signals.append("WS Upgrade")
+                # Server checks
+                server_lower = server.lower()
+                for srv in ["nginx", "apache", "envoy", "caddy", "litespeed"]:
+                    if srv in server_lower:
+                        signals.append(srv.capitalize())
+
+                # Protocol
                 if resp.version == aiohttp.HttpVersion11:
-                    pass # Standard
+                    signals.append("HTTP/1.1")
                 elif resp.version == aiohttp.HttpVersion10:
                     signals.append("HTTP/1.0")
+                
+                # TLS/SSL Check (Basic) - If we're on 443 and got here, it's TLS
+                if protocol == "https":
+                    signals.append("TLS")
+
+                if "upgrade" in headers_lower.get("connection", ""):
+                    signals.append("WS:Supported")
 
                 return {
                     "target": target,
                     "status": resp.status,
                     "server": server,
                     "signals": list(set(signals)),
-                    "version": str(resp.version)
+                    "version": str(resp.version),
+                    "port": port
                 }
         except:
             return None
@@ -106,115 +113,119 @@ class AsyncScanner:
                 # Use islice to skip start_at addresses
                 for ip in itertools.islice(net_obj, start_at, None):
                     if self.stopped: break
+                    await self._pause_event.wait()
+                    
                     for port in ports:
                         if self.stopped: break
                         tasks.append(self.check_host(session, str(ip), port))
                         
                         if len(tasks) >= self.concurrency:
-                            batch = await asyncio.gather(*tasks)
-                            for res in batch:
-                                count += 1
-                                if res:
-                                    # High Confidence Signature (target, status, server, sorted signals)
-                                    sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
-                                    if sig_tuple in seen:
-                                        progress.update(task, completed=count)
-                                        continue
-                                    seen.add(sig_tuple)
+                            try:
+                                batch = await asyncio.gather(*tasks)
+                                for res in batch:
+                                    count += 1
+                                    if res:
+                                        # High Confidence Signature Deduplication
+                                        sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
+                                        if sig_tuple in seen:
+                                            progress.update(task, completed=count)
+                                            continue
+                                        seen.add(sig_tuple)
 
-                                    # Filter noise: In quiet mode, only show if interesting signals exist or success
-                                    is_interesting = len(res['signals']) > 0 or res['status'] == 200
-                                    if quiet_mode and not is_interesting:
+                                        # Unique findings only: 404/403/405 filtered by default in quiet
+                                        is_ok = res['status'] == 200 or len(res['signals']) > 0
+                                        if quiet_mode and not is_ok:
+                                            progress.update(task, completed=count)
+                                            continue
+                                        
+                                        findings += 1
+                                        hits.append(res)
+                                        progress.update(task, completed=count, findings=findings)
+                                        ui.hit_compact(count, total, res['target'], res['server'], res['status'], port=res['port'], version=res['version'])
+                                        if res['signals']:
+                                            ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'], port=res['port'], version=res['version'])
+                                    else:
                                         progress.update(task, completed=count)
-                                        continue
-                                    
-                                    findings += 1
-                                    hits.append(res)
-                                    progress.update(task, completed=count, findings=findings)
-                                    
-                                    # Regular hit output - only if actually new/interesting
-                                    ui.hit_compact(count, total, res['target'], res['server'], res['status'])
-                                    
-                                    # Interesting Highlight
-                                    if res['signals']:
-                                        ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'])
-                                else:
-                                    progress.update(task, completed=count)
-                            tasks = []
-                
+                                tasks = []
+                            except KeyboardInterrupt:
+                                self.stop()
+                                break
+                            
                 if tasks and not self.stopped:
                     batch = await asyncio.gather(*tasks)
+                    # ... processing batch ...
                     for res in batch:
                         count += 1
                         if res:
                             sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
-                            if sig_tuple in seen:
+                            if sig_tuple not in seen:
+                                seen.add(sig_tuple)
+                                is_ok = res['status'] == 200 or len(res['signals']) > 0
+                                if not quiet_mode or is_ok:
+                                    findings += 1
+                                    hits.append(res)
+                                    progress.update(task, completed=count, findings=findings)
+                                    ui.hit_compact(count, total, res['target'], res['server'], res['status'], port=res['port'], version=res['version'])
+                                    if res['signals']:
+                                        ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'], port=res['port'], version=res['version'])
+                                else:
+                                    progress.update(task, completed=count)
+                            else:
                                 progress.update(task, completed=count)
-                                continue
-                            seen.add(sig_tuple)
-
-                            is_interesting = len(res['signals']) > 0 or res['status'] == 200
-                            if quiet_mode and not is_interesting:
-                                progress.update(task, completed=count)
-                                continue
-
-                            findings += 1
-                            hits.append(res)
-                            progress.update(task, completed=count, findings=findings)
-                            ui.hit_compact(count, total, res['target'], res['server'], res['status'])
-                            if res['signals']:
-                                ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'])
                         else:
                             progress.update(task, completed=count)
         return hits, count // len(ports) if len(ports) > 0 else count
 
-    async def scan_list(self, targets, ports=[80], quiet_mode=False, start_at=0):
+    async def scan_list(self, target_gen, ports=[80], quiet_mode=False, start_at=0):
         from .utils import utils
         hits = []
         seen = set()
-        # Slice targets for resume support
-        targets_slice = targets[start_at:]
-        total = len(targets) * len(ports)
         count = start_at * len(ports)
         findings = 0
         
         progress = utils.get_progress()
-        task = progress.add_task("Scanning", total=total, completed=count, findings=findings)
+        task = progress.add_task("Scanning List", total=None, completed=count, findings=findings)
 
         async with aiohttp.ClientSession() as session:
             with Live(Group(progress), console=ui.console, refresh_per_second=4, transient=False) as live:
                 tasks = []
-                for target in targets_slice:
+                for target in target_gen:
                     if self.stopped: break
+                    await self._pause_event.wait()
+                    
                     for port in ports:
                         if self.stopped: break
                         tasks.append(self.check_host(session, target.strip(), port))
                         
                         if len(tasks) >= self.concurrency:
-                            batch = await asyncio.gather(*tasks)
-                            for res in batch:
-                                count += 1
-                                if res:
-                                    sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
-                                    if sig_tuple in seen:
-                                        progress.update(task, completed=count)
-                                        continue
-                                    seen.add(sig_tuple)
+                            try:
+                                batch = await asyncio.gather(*tasks)
+                                for res in batch:
+                                    count += 1
+                                    if res:
+                                        sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
+                                        if sig_tuple in seen:
+                                            progress.update(task, completed=count)
+                                            continue
+                                        seen.add(sig_tuple)
 
-                                    is_interesting = len(res['signals']) > 0 or res['status'] == 200
-                                    if quiet_mode and not is_interesting:
+                                        is_ok = res['status'] == 200 or len(res['signals']) > 0
+                                        if quiet_mode and not is_ok:
+                                            progress.update(task, completed=count)
+                                            continue
+                                        
+                                        findings += 1
+                                        hits.append(res)
+                                        progress.update(task, completed=count, findings=findings)
+                                        ui.hit_compact(count, count, res['target'], res['server'], res['status'], port=res['port'], version=res['version'])
+                                        if res['signals']:
+                                            ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'], port=res['port'], version=res['version'])
+                                    else:
                                         progress.update(task, completed=count)
-                                        continue
-                                    
-                                    findings += 1
-                                    hits.append(res)
-                                    progress.update(task, completed=count, findings=findings)
-                                    ui.hit_compact(count, total, res['target'], res['server'], res['status'])
-                                    if res['signals']:
-                                        ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'])
-                                else:
-                                    progress.update(task, completed=count)
-                            tasks = []
+                                tasks = []
+                            except KeyboardInterrupt:
+                                self.stop()
+                                break
                 
                 if tasks and not self.stopped:
                     batch = await asyncio.gather(*tasks)
@@ -222,22 +233,20 @@ class AsyncScanner:
                         count += 1
                         if res:
                             sig_tuple = (res['target'], res['status'], res['server'], tuple(sorted(res['signals'])))
-                            if sig_tuple in seen:
+                            if sig_tuple not in seen:
+                                seen.add(sig_tuple)
+                                is_ok = res['status'] == 200 or len(res['signals']) > 0
+                                if not quiet_mode or is_ok:
+                                    findings += 1
+                                    hits.append(res)
+                                    progress.update(task, completed=count, findings=findings)
+                                    ui.hit_compact(count, count, res['target'], res['server'], res['status'], port=res['port'], version=res['version'])
+                                    if res['signals']:
+                                        ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'], port=res['port'], version=res['version'])
+                                else:
+                                    progress.update(task, completed=count)
+                            else:
                                 progress.update(task, completed=count)
-                                continue
-                            seen.add(sig_tuple)
-
-                            is_interesting = len(res['signals']) > 0 or res['status'] == 200
-                            if quiet_mode and not is_interesting:
-                                progress.update(task, completed=count)
-                                continue
-
-                            findings += 1
-                            hits.append(res)
-                            progress.update(task, completed=count, findings=findings)
-                            ui.hit_compact(count, total, res['target'], res['server'], res['status'])
-                            if res['signals']:
-                                ui.interesting_panel(res['target'], res['server'], res['status'], res['signals'])
                         else:
                             progress.update(task, completed=count)
         return hits, count // len(ports) if len(ports) > 0 else count

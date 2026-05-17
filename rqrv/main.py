@@ -48,9 +48,19 @@ async def run_inspector():
         
     ui.result_panel(data)
 
+def get_ports_prompt():
+    p_choice = ui.input_prompt("PORTS (80, 443, 8080 or custom comma-list)", "Default: 80")
+    if not p_choice: return [80]
+    try:
+        return [int(p.strip()) for p in p_choice.split(",") if p.strip().isdigit()]
+    except:
+        return [80]
+
 async def scan_cidr_flow():
     cidr = ui.input_prompt("CIDR (e.g. 192.168.1.0/24)")
     if not cidr: return
+    
+    ports = get_ports_prompt()
     
     start_at = 0
     resume_choice = ui.input_prompt("START FROM INDEX (default: 0)", "Press ENTER for normal start")
@@ -58,8 +68,10 @@ async def scan_cidr_flow():
         start_at = int(resume_choice)
 
     scanner = AsyncScanner(concurrency=utils.settings['threads'], timeout=utils.settings['timeout'])
-    ui.console.print(f"\n[bold cyan]»[/bold cyan] [bold yellow]PREPARING NETWORK MAP: {cidr}[/bold yellow]\n")
-    hits, last_pos = await scanner.scan_cidr(cidr, quiet_mode=utils.settings['quiet_mode'], start_at=start_at)
+    ui.console.print(f"\n[bold cyan]»[/bold cyan] [bold yellow]PREPARING NETWORK MAP: {cidr}[/bold yellow]")
+    ui.console.print(f"[dim]Controls: [bold red]Ctrl+C[/bold red] to Pause/Stop | Ports: {ports}[/dim]\n")
+    
+    hits, last_pos = await scanner.scan_cidr(cidr, ports=ports, quiet_mode=utils.settings['quiet_mode'], start_at=start_at)
     if utils.settings['save_logs']:
         utils.log_scan("cidr", hits)
     ui.console.print(f"\n[bold bright_green]✓ ANALYSIS COMPLETE. {len(hits)} ACTIVE NODES IDENTIFIED.[/bold bright_green]")
@@ -81,15 +93,15 @@ async def bulk_audit_flow():
     choice = input().strip()
     try:
         fpath = files[int(choice)-1]
+        ports = get_ports_prompt()
         
-        # Memory optimized generator read
-        targets = []
-        with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
-            for line in f:
-                clean = line.strip()
-                if clean:
-                    targets.append(clean)
-        
+        # Memory optimized generator read - Chunk based for millions
+        def target_generator(path):
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    clean = line.strip()
+                    if clean: yield clean
+
         # Resume Check
         start_at = 0
         resume_choice = ui.input_prompt("START FROM LINE (default: 0)", "Press ENTER for normal start")
@@ -97,14 +109,22 @@ async def bulk_audit_flow():
             start_at = int(resume_choice)
 
         scanner = AsyncScanner(concurrency=utils.settings['threads'], timeout=utils.settings['timeout'])
-        ui.console.print(f"\n[bold cyan]»[/bold cyan] [bold yellow]AUDITING {len(targets)} ASSETS[/bold yellow]\n")
-        hits, last_pos = await scanner.scan_list(targets, quiet_mode=utils.settings['quiet_mode'], start_at=start_at)
+        ui.console.print(f"\n[bold cyan]»[/bold cyan] [bold yellow]AUDITING ASSETS FROM: {os.path.basename(fpath)}[/bold yellow]")
+        ui.console.print(f"[dim]Controls: [bold red]Ctrl+C[/bold red] to Pause/Stop | Ports: {ports}[/dim]\n")
+        
+        # We need to slice the generator or just use islice
+        import itertools
+        targets_gen = itertools.islice(target_generator(fpath), start_at, None)
+        
+        hits, last_pos = await scanner.scan_list(targets_gen, ports=ports, quiet_mode=utils.settings['quiet_mode'], start_at=start_at)
         
         if utils.settings['save_logs']:
             utils.log_scan("bulk", hits)
         ui.console.print(f"\n[bold bright_green]✓ BATCH AUDIT COMPLETE. {len(hits)} RESPONSIVE ASSETS.[/bold bright_green]")
-        if last_pos < len(targets):
-            ui.console.print(f"[dim]Note: Scan ended at line {last_pos}[/dim]")
+        if last_pos > start_at:
+             ui.console.print(f"[dim]Note: Scan ended at line {last_pos}[/dim]")
+    except Exception as e:
+        ui.console.print(f"[bold red]× ERROR:[/bold red] {str(e)}")
     except Exception as e:
         ui.console.print(f"[bold red]× ERROR:[/bold red] {str(e)}")
 
@@ -116,16 +136,17 @@ def settings_menu():
         for k, v in utils.settings.items():
             ui.console.print(f" [bright_cyan]»[/bright_cyan] [white]{k:<15}[/white] : [bold green]{v}[/bold green]")
         
-        ui.console.print("\n[bold yellow][1-6][/bold yellow] Change Setting | [bold red][0][/bold red] Back")
+        ui.console.print("\n[bold yellow][1-7][/bold yellow] Change Setting | [bold red][0][/bold red] Back")
         ui.console.print("\n RQ ► ", end="")
         choice = input().strip()
         
         if choice == '1': utils.settings['threads'] = int(ui.input_prompt("THREADS (Current: {})".format(utils.settings['threads'])) or utils.settings['threads'])
         elif choice == '2': utils.settings['timeout'] = int(ui.input_prompt("TIMEOUT (Current: {})".format(utils.settings['timeout'])) or utils.settings['timeout'])
         elif choice == '3': utils.settings['retries'] = int(ui.input_prompt("RETRIES (Current: {})".format(utils.settings['retries'])) or utils.settings['retries'])
-        elif choice == '4': utils.settings['show_all'] = not utils.settings['show_all']
-        elif choice == '5': utils.settings['save_logs'] = not utils.settings['save_logs']
-        elif choice == '6': utils.settings['quiet_mode'] = not utils.settings['quiet_mode']
+        elif choice == '4': utils.settings['chunk_size'] = int(ui.input_prompt("CHUNK SIZE (Current: {})".format(utils.settings['chunk_size'])) or utils.settings['chunk_size'])
+        elif choice == '5': utils.settings['show_all'] = not utils.settings['show_all']
+        elif choice == '6': utils.settings['save_logs'] = not utils.settings['save_logs']
+        elif choice == '7': utils.settings['quiet_mode'] = not utils.settings['quiet_mode']
         elif choice == '0':
             utils.save_settings(utils.settings)
             break
