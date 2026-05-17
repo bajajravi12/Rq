@@ -1,1 +1,0 @@
-# RQ Infrastructure Terminal Core
