@@ -1,1 +1,1 @@
-# RQ Core Modules
+# RQ Infrastructure Terminal Core

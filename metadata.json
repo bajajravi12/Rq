@@ -1,6 +1,6 @@
 {
-  "name": "RAVAN INFRA-X LITE",
-  "description": "Fast, stable infrastructure inventory and response analysis tool optimized for Termux.",
+  "name": "RQ Terminal",
+  "description": "Production-grade infrastructure inventory and response analysis tool for Termux.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

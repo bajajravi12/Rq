@@ -1,0 +1,6 @@
+rich
+requests
+httpx
+aiohttp
+dnspython
+tldextract

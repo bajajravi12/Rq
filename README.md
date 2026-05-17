@@ -1,41 +1,28 @@
 # RQ INFRA TERMINAL
 
-Production-grade infrastructure inventory, server fingerprinting, and authorized diagnostics tool for Termux.
+Production-grade infrastructure inventory, server footprinting, and authorized diagnostics tool for Termux.
 
 ## Installation
 
-Run from the root of the project:
-
 ```bash
-pip install .
-```
-
-Or for updates:
-
-```bash
-pip install --force-reinstall .
+git clone <REPO_URL>
+cd Rq
+pip install -r requirements.txt
 ```
 
 ## Usage
 
-After installation, you can run the tool using:
-
 ```bash
-rq
-```
-
-Alternatively:
-
-```bash
-python -m rqrv
+python run.py
 ```
 
 ## Features
 
-- Single Host Inspector
-- CIDR Inventory (optimized)
-- Bulk Asset Audit
-- Method Analyzer
-- Reverse DNS Pro
-- IP to ASN/CIDR
-- Saved Logs viewer
+- **Single Host Inspector**: Deep dive into headers, TLS, and CDN.
+- **CIDR Inventory**: Optimized network scanning.
+- **Bulk Asset Audit**: Fast auditing of millions of targets from TXT.
+- **Method Analyzer**: Advanced response fingerprinting.
+- **Reverse DNS Pro**: Reverse PTR and hostname analysis.
+- **Logs**: Persistent results storage.
+
+Made by RQ.
